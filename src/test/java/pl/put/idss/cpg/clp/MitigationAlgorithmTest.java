@@ -125,8 +125,8 @@ public class MitigationAlgorithmTest {
         
         when(interactionRepository.getAll()).thenReturn(Arrays.asList(Examples.createAspirinInteractionOperator()));
         when(revisionRepository.getAll()).thenReturn(Arrays.asList(
-                Examples.createPPIRevisionOperator(),
-                Examples.createClopidogrelRevisionOperator()
+                Examples.createClopidogrelRevisionOperator(),
+                Examples.createPPIRevisionOperator()
                 ));
        
         DecisionVariable hp = new DecisionVariable("HP", Arrays.asList("n","p"));

@@ -1,5 +1,7 @@
 package pl.put.idss.cpg.clp;
 
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
@@ -110,8 +112,8 @@ public class MitigationAlgorithm {
         return !revised.isEmpty();
     }
 
-    public List<RevisionOperator> activateRevisionOperators(CombinedLogicalModel clm,
-            Set<Variable<?>> psi) {
+    private List<RevisionOperator> activateRevisionOperators(CombinedLogicalModel clm,
+            final Set<Variable<?>> psi) {
         List<RevisionOperator> operators = revisionOperatorRepository.getAll();
         Set<String> diseases = clm.getDiseases();
         
@@ -122,7 +124,21 @@ public class MitigationAlgorithm {
                 active.add(ro);
             }
         }
-        //TODO sort
+        
+        Collections.sort(active, new Comparator<RevisionOperator>() {
+
+            @Override
+            public int compare(RevisionOperator o1, RevisionOperator o2) {
+                int scopeDiff = Sets.difference(o1.getRevised(), o1.getInteraction()).size() 
+                        - Sets.difference(o2.getRevised(), o2.getInteraction()).size();
+                if (scopeDiff != 0) {
+                    return scopeDiff;
+                }
+                return Sets.intersection(psi, o2.getVariables()).size()
+                        - Sets.intersection(psi, o1.getVariables()).size();
+            }
+            
+        });
         return active;
     }
     
