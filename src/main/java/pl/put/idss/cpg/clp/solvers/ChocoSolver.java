@@ -14,7 +14,7 @@ import pl.put.idss.cpg.clp.model.VariableValue;
 import choco.Choco;
 import choco.cp.model.CPModel;
 import choco.cp.solver.CPSolver;
-import choco.kernel.model.constraints.Constraint;
+import choco.kernel.model.variables.integer.IntegerExpressionVariable;
 import choco.kernel.model.variables.integer.IntegerVariable;
 import choco.kernel.solver.variables.integer.IntDomainVar;
 
@@ -37,21 +37,36 @@ public class ChocoSolver implements pl.put.idss.cpg.clp.solvers.Solver {
             map.put(variable, var);
         }
         
+        HashMap<IntegerExpressionVariable,Set<Variable<?>>> constraintVariables = Maps.newHashMap();
+        
         for (LogicalModel model : clm.getModels()) {
-            cpModel.addConstraint(createDisjunction(model.getLogicalExpressions(), map));
+            IntegerVariable var = createDisjunction(model.getDisease(), model.getLogicalExpressions(), cpModel, map);
+            constraintVariables.put(Choco.mult(10, var), model.getVariables());
         }
         
+        int i = 0;
         for (Set<VariableValue<?>> interaction : clm.getAdverseInteractions()) {
-            cpModel.addConstraint(Choco.not(createConjunction(interaction, map)));
+            IntegerVariable var = createConjunction("IO-" + i++, interaction, cpModel, map);
+            IntegerVariable io = Choco.makeBooleanVar("not-" + var.getName());
+            cpModel.addConstraint(Choco.boolChanneling(io, var, 0));
+            constraintVariables.put(Choco.mult(1, io), getVariables(interaction));
         }
         
+        IntegerVariable pi = createConjunction("patientInformation", patientInformation, cpModel, map);
+        constraintVariables.put(Choco.mult(100, pi), getVariables(patientInformation));
         
-        cpModel.addConstraint(createConjunction(patientInformation, map));
+        IntegerVariable constraintsSum = Choco.makeIntVar("maxCSP", 0, 1000);
+        cpModel.addConstraint(Choco.eq(constraintsSum, 
+                Choco.sum(constraintVariables.keySet().toArray(new IntegerExpressionVariable[0]))));
         
         CPSolver cpSolver = new CPSolver();
         cpSolver.read(cpModel);
         
-        if (cpSolver.solve()) {
+        cpSolver.maximize(cpSolver.getVar(constraintsSum), false);
+        
+        if (cpSolver.getVar(constraintsSum).getVal() == 100 
+                + 10 * clm.getModels().size() 
+                + 1 * clm.getAdverseInteractions().size()) {
             Set<VariableValue<?>> values = Sets.newHashSet();
             for (Entry<Variable<?>, IntegerVariable> entry : map.entrySet()) {
                 IntDomainVar cpVar = cpSolver.getVar(entry.getValue());
@@ -59,42 +74,62 @@ public class ChocoSolver implements pl.put.idss.cpg.clp.solvers.Solver {
             }
             return new Solution(true, values, null);
         } else {
-            // TODO PSI
-            return new Solution(false, null, variables);
+            Set<Variable<?>> psi = Sets.newHashSet();
+            for (Entry<IntegerExpressionVariable, Set<Variable<?>>> entry : constraintVariables.entrySet()) {
+                IntegerExpressionVariable expr = entry.getKey();
+                if (cpSolver.getVar((IntegerVariable)expr.getVariable(0)).getVal() == 0) {
+                    psi.addAll(entry.getValue());
+                }
+            }
+            return new Solution(false, null, psi);
         }
     }
 
-    private Constraint createDisjunction(
-            Set<Set<VariableValue<?>>> expressions,
+    private IntegerVariable createDisjunction(String name,
+            Set<Set<VariableValue<?>>> expressions, CPModel cpModel,
             Map<Variable<?>, IntegerVariable> variables) {
-        Constraint[] constraints = new Constraint[expressions.size()];
+        IntegerVariable[] literals = new IntegerVariable[expressions.size()];
         Iterator<Set<VariableValue<?>>> iterator = expressions.iterator();
-        for (int i = 0; i < constraints.length; i++) {
-            constraints[i] = createConjunction(iterator.next(), variables);
+        for (int i = 0; i < literals.length; i++) {
+            literals[i] = createConjunction(name + "-path-" + i, iterator.next(), cpModel, variables);
         }
-        return Choco.or(constraints);
+        IntegerVariable var = Choco.makeBooleanVar(name);
+        cpModel.addConstraint(Choco.reifiedOr(var, literals));
+        return var;
     }
-
-    private Constraint createConjunction(Set<VariableValue<?>> expression,
-            Map<Variable<?>, IntegerVariable> variables) {
+    
+    private IntegerVariable createConjunction(String name,
+            Set<VariableValue<?>> expression, CPModel cpModel, Map<Variable<?>, IntegerVariable> variables) {
         Iterator<VariableValue<?>> iterator = expression.iterator();
-        Constraint[] literals = new Constraint[expression.size()];
+        IntegerVariable[] literals = new IntegerVariable[expression.size()];
         for (int j = 0; j < literals.length; j++) {
-            literals[j] = createConstraint(iterator.next(), variables);
+            literals[j] = createConstraint(name, iterator.next(), cpModel, variables);
         }
-        return Choco.and(literals);
+        IntegerVariable var = Choco.makeBooleanVar(name);
+        cpModel.addConstraint(Choco.reifiedAnd(var, literals));
+        return var;
     }
 
-    private Constraint createConstraint(VariableValue<?> value,
-            Map<Variable<?>, IntegerVariable> variables) {
+    private IntegerVariable createConstraint(String name, VariableValue<?> value,
+            CPModel cpModel, Map<Variable<?>, IntegerVariable> variables) {
         Variable<?> variable = value.getVariable();
         List<?> domain = value.getVariable().getDomain();
         int index = domain.indexOf(value.getValue());
-        return Choco.eq(variables.get(variable), index);
+        IntegerVariable var = Choco.makeBooleanVar(name + "-" + variable.getName());
+        cpModel.addConstraint(Choco.boolChanneling(var, variables.get(variable), index));
+        return var;
     }
-    
+
     private static <T> VariableValue<T> createValue(Variable<T> var, int val) {
         return var.assignValue(var.getDomain().get(val));
+    }
+
+    private static Set<Variable<?>> getVariables(Set<VariableValue<?>> interaction) {
+        Set<Variable<?>> vars = Sets.newHashSet();
+        for (VariableValue<?> value : interaction) {
+            vars.add(value.getVariable());
+        }
+        return vars;
     }
 
 }

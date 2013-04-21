@@ -3,6 +3,7 @@ package pl.put.idss.cpg.clp;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.Assert.assertThat;
@@ -141,12 +142,16 @@ public class MitigationAlgorithmTest {
                 fast.assignValue("p"),
                 ns.assignValue("r")
                 );
+        
         Result result = algorithm.mitigate(du, tia, patient);
         
         assertThat(result.isSuccess(), equalTo(true));
         assertThat(result.getSolution(), not(empty()));
         assertThat(result.getSolution(), hasItem(new ActionVariable("CL").assignValue(true)));
         assertThat(result.getSolution(), hasItem(new ActionVariable("PCS").assignValue(true)));
+        assertThat(result.getPotentialSourceOfInfeasibility(), hasSize(2));
+        assertThat(result.getPotentialSourceOfInfeasibility(), hasItem(new ActionVariable("A")));
+        assertThat(result.getPotentialSourceOfInfeasibility(), hasItem(new ActionVariable("PPI")));
         assertThat(result.getRevisionOperator(), equalTo(Examples.createClopidogrelRevisionOperator()));
     }
 
