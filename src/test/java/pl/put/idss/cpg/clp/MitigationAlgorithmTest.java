@@ -3,6 +3,7 @@ package pl.put.idss.cpg.clp;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
@@ -11,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Set;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -21,6 +23,7 @@ import pl.put.idss.cpg.Examples;
 import pl.put.idss.cpg.clp.MitigationAlgorithm.Result;
 import pl.put.idss.cpg.clp.model.ActionVariable;
 import pl.put.idss.cpg.clp.model.DecisionVariable;
+import pl.put.idss.cpg.clp.model.Variable;
 import pl.put.idss.cpg.clp.model.VariableValue;
 import pl.put.idss.cpg.clp.operators.InteractionOperator;
 import pl.put.idss.cpg.clp.operators.OperatorRepository;
@@ -114,9 +117,14 @@ public class MitigationAlgorithmTest {
         Result result = algorithm.mitigate(du, tia, patient);
         
         assertThat(result.isSuccess(), equalTo(true));
-        assertThat(result.getSolution(), not(empty()));
-        assertThat(result.getSolution(), hasItem(new ActionVariable("PPI").assignValue(true)));
-        assertThat(result.getSolution(), hasItem(new ActionVariable("SC").assignValue(true)));
+        
+        Set<VariableValue<?>> solution = result.getSolution();
+        assertThat(solution, hasSize(8));
+        assertThat(solution, hasItems(patient.toArray(new VariableValue<?>[0])));
+        assertThat(solution, hasItem(new ActionVariable("PPI").assignValue(true)));
+        assertThat(solution, hasItem(new ActionVariable("SC").assignValue(true)));
+        assertThat(solution, hasItem(new ActionVariable("PCS").assignValue(true)));
+        assertThat(solution, hasItem(new DecisionVariable("UE",Arrays.asList("h","nh")).assignValue("h")));
     }
     
     @Test
@@ -144,14 +152,22 @@ public class MitigationAlgorithmTest {
                 );
         
         Result result = algorithm.mitigate(du, tia, patient);
-        
+
         assertThat(result.isSuccess(), equalTo(true));
-        assertThat(result.getSolution(), not(empty()));
-        assertThat(result.getSolution(), hasItem(new ActionVariable("CL").assignValue(true)));
-        assertThat(result.getSolution(), hasItem(new ActionVariable("PCS").assignValue(true)));
-        assertThat(result.getPotentialSourceOfInfeasibility(), hasSize(2));
-        assertThat(result.getPotentialSourceOfInfeasibility(), hasItem(new ActionVariable("A")));
-        assertThat(result.getPotentialSourceOfInfeasibility(), hasItem(new ActionVariable("PPI")));
+        
+        Set<VariableValue<?>> solution = result.getSolution();
+        assertThat(solution, hasSize(9));
+        assertThat(solution, hasItems(patient.toArray(new VariableValue<?>[0])));
+        assertThat(solution, hasItem(new ActionVariable("RS").assignValue(true)));
+        assertThat(solution, hasItem(new ActionVariable("CL").assignValue(true)));
+        assertThat(solution, hasItem(new ActionVariable("PCS").assignValue(true)));
+        assertThat(solution, hasItem(new DecisionVariable("RST",Arrays.asList("el","ng")).assignValue("ng")));
+        
+        Set<Variable<?>> psi = result.getPotentialSourceOfInfeasibility();
+        assertThat(psi, hasSize(2));
+        assertThat(psi, hasItem(new ActionVariable("A")));
+        assertThat(psi, hasItem(new ActionVariable("PPI")));
+        
         assertThat(result.getRevisionOperator(), equalTo(Examples.createClopidogrelRevisionOperator()));
     }
 

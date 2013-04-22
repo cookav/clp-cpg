@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Set;
 
 import lombok.Data;
+import pl.put.idss.cpg.clp.model.ActionVariable;
 import pl.put.idss.cpg.clp.model.CombinedLogicalModel;
 import pl.put.idss.cpg.clp.model.LogicalModel;
 import pl.put.idss.cpg.clp.model.LogicalModelFactory;
@@ -50,11 +51,13 @@ public class MitigationAlgorithm {
 
         applyInteractionOperators(clm);
         Solution solution = solver.solve(clm, pi);
-        if (solution.isSuccess()) {
-            return new Result(true, solution.getAssignment(), null, null);
-        } else {
-            return addressPSI(clm, pi, solution.getPotentialSourceOfInfeasibility(), true);
+        Result result = solution.isSuccess() 
+                ? new Result(true,solution.getAssignment(), null, null) 
+                : addressPSI(clm, pi, solution.getPotentialSourceOfInfeasibility(), true);
+        if (result.isSuccess()) {
+            filterSolution(result.getSolution(), clm);
         }
+        return result;
     }
 
     private void applyInteractionOperators(CombinedLogicalModel clm) {
@@ -71,13 +74,14 @@ public class MitigationAlgorithm {
     }
     
     private Result addressPSI(CombinedLogicalModel clm, Set<VariableValue<?>> pi, Set<Variable<?>> psi, boolean applyIOs) {
+        Cloner cloner = new Cloner();
         List<RevisionOperator> operators = activateRevisionOperators(clm, psi);
         for (RevisionOperator ro : operators) {
-            CombinedLogicalModel copy = new Cloner().deepClone(clm);
+            CombinedLogicalModel copy = cloner.deepClone(clm);
             if (reviseCLM(copy, ro, applyIOs)) {
                 Solution solution = solver.solve(copy, pi);
                 if (solution.isSuccess()) {
-                    //TODO update CLM
+                    cloner.copyPropertiesOfInheritedClass(copy, clm);
                     return new Result(true, solution.getAssignment(), psi, ro);
                 }
             }
@@ -142,6 +146,27 @@ public class MitigationAlgorithm {
         return active;
     }
     
+    @SuppressWarnings("unchecked")
+    private void filterSolution(Set<VariableValue<?>> solution, CombinedLogicalModel clm) {
+        Set<VariableValue<?>> filtered = Sets.newHashSet();
+        for (LogicalModel model : clm.getModels()) {
+            for (Set<VariableValue<?>> expression : model.getLogicalExpressions()) {
+                if (solution.containsAll(expression)) {
+                    for (VariableValue<?> value : expression) {
+                        if (value.getVariable() instanceof ActionVariable) {
+                            if (((VariableValue<Boolean>) value).getValue() == false) {
+                                continue;
+                            }
+                        }
+                        filtered.add(value);
+                    }
+                    break;
+                }
+            }
+        }
+        solution.retainAll(filtered);
+    }
+
     @Data
     public static class Result {
         
